@@ -109,7 +109,7 @@ void* mgift(int64_t length){ // allocates you memory : on the heap if there is s
     }
 
     if(currentBlock==heapEnd){
-        printf("Not enough space : create a new page of length %ld\n", length-16);
+        //printf("Not enough space : create a new page of length %ld\n", length-16);
         void* newPage = createNewPage(length-16);
         return newPage;
     }
@@ -117,7 +117,7 @@ void* mgift(int64_t length){ // allocates you memory : on the heap if there is s
     
     //Create new block
     if(size-length >= 16){
-        printf("New block creation\n");
+        //printf("New block creation\n");
         void* newBlockPtr = currentBlock + length;
         int64_t newBlockSize = size-length;
         modifyMetadatas(newBlockPtr, newBlockSize); // creates header for the new block
@@ -141,7 +141,7 @@ void mthrow(void* blockPtr){ // frees the memory area represented by the address
             printf("Trying to free a unindentified memory zone\n");
             return;
         }
-        printf("Freeing page of size %d\n", pages[getPagePlace(blockPtr)].size);
+        //printf("Freeing page of size %d\n", pages[getPagePlace(blockPtr)].size);
         while(pagePlace<pageNumber){
             pages[pagePlace] = pages[pagePlace+1];
             pagePlace++;
