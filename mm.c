@@ -19,11 +19,11 @@ char memInitialized = 0;
 //=======UTILS FUNCTIONS=============
 
 void* getBlockFooter(void* headerPtr){
-    return headerPtr + ((*(int64_t*)headerPtr) & ~0b111) - 8;
+    return (char*)headerPtr + ((*(int64_t*)headerPtr) & ~0b111) - 8;
 }
 
 void* getNextBlock(void* blockPtr){
-    return blockPtr + ((*(int64_t*)blockPtr) & ~0b111);
+    return (char*)blockPtr + ((*(int64_t*)blockPtr) & ~0b111);
 }
 
 int64_t getBlockFlags(void* headerPtr){
@@ -52,11 +52,12 @@ void modifyBlockHeader(void* blockPtr, int64_t header){
 }
 
 void* getPreviousBlock(void* blockPtr){
-    return blockPtr-(*(int64_t*)(blockPtr-8) & ~0b111);
+    return (char*)blockPtr-(*(int64_t*)((char*)blockPtr-8) & ~0b111);
 }
 
 void* createNewPage(int64_t size){
         void* newPage = mmap(NULL, size, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_ANONYMOUS, -1, 0);
+        if(newPage == MAP_FAILED) return NULL;
         pages[pageNumber].pagePointer = newPage;
         pages[pageNumber].size = size;
         pageNumber++;
@@ -64,7 +65,7 @@ void* createNewPage(int64_t size){
 }
 
 int notInHeap(void* blockPtr){
-    if(blockPtr >= heapEnd || blockPtr < heapBase){
+    if((char*)blockPtr >= (char*)heapEnd || (char*)blockPtr < (char*)heapBase){
         return 1;
     }
     return 0;
@@ -79,13 +80,38 @@ int getPagePlace(void* pagePtr){
     return -1;
 }
 
+int expandHeap(int sizeInPages){
+    int64_t size = sizeInPages * getpagesize();
+    void* newPage = mmap(heapEnd, size, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_ANONYMOUS|MAP_FIXED_NOREPLACE, -1, 0);
 
+    if(newPage == MAP_FAILED){
+        return 0;
+    }
+
+    if(newPage != heapEnd){
+        munmap(newPage, size);
+        return 0;
+    }
+
+    void* lastBlock = getPreviousBlock(heapEnd);
+
+    if(!getBlockFlags(lastBlock)){
+        int64_t newSize = getBlockSize(lastBlock) + size;
+        modifyBlockHeader(lastBlock, newSize);
+        modifyBlockFooter(lastBlock, newSize);
+    } else {
+        modifyBlockHeader(heapEnd, size);
+        modifyBlockFooter(heapEnd, size);
+    }
+
+    heapEnd = (char*)heapEnd + size;
+    return 1;
+}
 //================CORE FUNCTIONS===========
 
 void minit(int sizeOfHeapByPages){ // inits a heap of size (sizeOfHeapByPages*OSPageSize)
     int heapSize = getpagesize() * sizeOfHeapByPages;
     heapBase = mmap(NULL, heapSize, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_ANONYMOUS, -1, 0);
-
     int64_t header = heapSize;
     *(int64_t*)heapBase = header;
     *(int64_t*)getBlockFooter(heapBase) = header;
@@ -108,16 +134,18 @@ void* mgift(int64_t length){ // allocates you memory : on the heap if there is s
     }
 
     if(currentBlock==heapEnd){
-        //printf("Not enough space : create a new page of length %ld\n", length-16);
-        void* newPage = createNewPage(length-16);
-        return newPage;
+        if(!expandHeap(1)){
+            printf("Not enough space : create a new page of length %ld\n", length-16);
+            void* newPage = createNewPage(length);
+            return newPage;
+        }
     }
     int64_t size = getBlockSize(currentBlock);
     
     //Create new block
     if(size-length >= 16){
         //printf("New block creation\n");
-        void* newBlockPtr = currentBlock + length;
+        void* newBlockPtr = (char*)currentBlock + length;
         int64_t newBlockSize = size-length;
         modifyMetadatas(newBlockPtr, newBlockSize); // creates header for the new block
         modifyBlockFooter(newBlockPtr, newBlockSize); // creates footer for the new block
@@ -126,7 +154,7 @@ void* mgift(int64_t length){ // allocates you memory : on the heap if there is s
     int64_t flags = 0b001;
     modifyBlockHeader(currentBlock, size|flags);
     modifyBlockFooter(currentBlock, size|flags);
-    return currentBlock+8;
+    return (char*)currentBlock+8;
 }
 
 void mthrow(void* blockPtr){ // frees the memory area represented by the address of the pointer. If it is in the heap, it will consolidate the memory block with the adjacent ones,
@@ -140,16 +168,18 @@ void mthrow(void* blockPtr){ // frees the memory area represented by the address
             printf("Trying to free a unindentified memory zone\n");
             return;
         }
+        int idx = getPagePlace(blockPtr);
+        int64_t size = pages[idx].size;
         //printf("Freeing page of size %d\n", pages[getPagePlace(blockPtr)].size);
         while(pagePlace<pageNumber){
             pages[pagePlace] = pages[pagePlace+1];
             pagePlace++;
         }
         pageNumber--;
-        munmap(blockPtr, pages[getPagePlace(blockPtr)].size); // if not in heap, free the entire memory area
+        munmap(blockPtr, size); // if not in heap, free the entire memory area
         return;
     }
-    blockPtr = blockPtr - 8; // goes to the header
+    blockPtr = (char*)blockPtr - 8; // goes to the header
 
 
 
