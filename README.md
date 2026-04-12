@@ -20,7 +20,7 @@ void minit(int sizeOfHeapByPages);
 
 Initializes the heap. Must be called before any allocation. The argument specifies the heap size in pages. If omitted or called after allocation has already started, the heap defaults to 1 page.
 
-### ôisegjfîoserjf
+---
 
 ### Allocation
 
@@ -53,7 +53,6 @@ Prints a representation of the current heap state (all blocks, their sizes, and 
 ---
 
 ## Internal Utilities
----
 These functions are exposed in `mm.h` and used internally by the allocator. They are not intended to be called directly in most use cases.
 
 | Function | Description |
